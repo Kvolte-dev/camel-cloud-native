@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<TON-USER>/camel-cloud-native.git
+    repoURL: https://github.com/kvolte-dev/camel-cloud-native.git
     targetRevision: main
     path: gitops/messaging
   destination:
@@ -27,7 +27,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<TON-USER>/camel-cloud-native.git
+    repoURL: https://github.com/kvolte-dev/camel-cloud-native.git
     targetRevision: main
     path: gitops/observability
   destination:
@@ -48,7 +48,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/<TON-USER>/camel-cloud-native.git
+    repoURL: https://github.com/kvolte-dev/camel-cloud-native.git
     targetRevision: main
     path: charts/camel-app
     helm:
