@@ -12,7 +12,7 @@ env:
   OLLAMA_URL: "http://host.docker.internal:11434"
   OLLAMA_MODEL: "llama3.1:8b"
   OTEL_ENABLED: "true"
-  PROCESSING_DELAY_MS: "200"
+  PROCESSING_DELAY_MS: "100"
 
 resources:
   requests:
