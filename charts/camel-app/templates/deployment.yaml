@@ -24,10 +24,10 @@ spec:
             - name: http
               containerPort: {{ .Values.service.port }}
           env:
-            { { - range $key, $val := .Values.env } }
-            - name: { { $key } }
-              value: { { $val | quote } }
-            { { - end } }
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
           envFrom:
             - secretRef:
                 name: camel-app-secrets
