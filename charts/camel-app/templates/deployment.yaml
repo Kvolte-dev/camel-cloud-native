@@ -16,10 +16,24 @@ spec:
       labels:
         app: {{ .Release.Name }}
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: camel-app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
@@ -33,6 +47,9 @@ spec:
                 name: camel-app-secrets
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           startupProbe:
             httpGet:
               path: /actuator/health/liveness
@@ -49,3 +66,6 @@ spec:
               path: /actuator/health/readiness
               port: http
             periodSeconds: 10
+      volumes:
+        - name: tmp
+          emptyDir: {}
