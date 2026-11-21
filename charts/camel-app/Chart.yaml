@@ -1,0 +1,6 @@
+apiVersion: v2
+name: camel-app
+description: Application Spring Boot 4 / Apache Camel 4 Cloud-Native
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

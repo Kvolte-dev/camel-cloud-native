@@ -1,0 +1,37 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders-process
+  namespace: messaging
+  labels:
+    strimzi.io/cluster: local-kafka
+spec:
+  topicName: orders.process
+  partitions: 3
+  replicas: 1
+  config:
+    retention.ms: 604800000
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders-dlq
+  namespace: messaging
+  labels:
+    strimzi.io/cluster: local-kafka
+spec:
+  topicName: orders.dlq
+  partitions: 1
+  replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: orders-dlq-analyzed
+  namespace: messaging
+  labels:
+    strimzi.io/cluster: local-kafka
+spec:
+  topicName: orders.dlq.analyzed
+  partitions: 1
+  replicas: 1

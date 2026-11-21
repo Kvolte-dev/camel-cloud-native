@@ -1,0 +1,59 @@
+spring:
+  application:
+    name: camel-app
+
+server:
+  port: 8080
+
+app:
+  processing-delay-ms: ${PROCESSING_DELAY_MS:0}
+
+camel:
+  main:
+    name: camel-lab-context
+  component:
+    activemq6:
+      broker-url: ${ACTIVEMQ_URL:tcp://localhost:61616}
+      username: ${ACTIVEMQ_USER:admin}
+      password: ${ACTIVEMQ_PASSWORD:admin}
+    kafka:
+      brokers: ${KAFKA_BROKERS:localhost:9092}
+
+ollama:
+  base-url: ${OLLAMA_URL:http://localhost:11434}
+  model-name: ${OLLAMA_MODEL:llama3.1:8b}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+    export:
+      enabled: ${OTEL_ENABLED:false}
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_TRACES_ENDPOINT:http://otel-collector.observability.svc.cluster.local:4318/v1/traces}
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_ENABLED:false}
+        url: ${OTEL_METRICS_ENDPOINT:http://otel-collector.observability.svc.cluster.local:4318/v1/metrics}
+  logging:
+    export:
+      otlp:
+        enabled: ${OTEL_ENABLED:false}
+
+logging:
+  level:
+    root: INFO
+    com.lab.camel: INFO

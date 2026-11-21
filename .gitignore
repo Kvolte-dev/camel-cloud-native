@@ -1,0 +1,11 @@
+# OpenTofu / Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+.terraform.lock.hcl
+
+# Java / IDE
+app/target/
+**/.idea/
+*.iml
