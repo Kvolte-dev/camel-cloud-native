@@ -1,6 +1,6 @@
 image:
   repository: camel-app
-  tag: "1.0.3"
+  tag: "1.0.4"
   pullPolicy: IfNotPresent
 
 service:
@@ -19,6 +19,8 @@ env:
   QDRANT_COLLECTION: "sre-runbooks"
   OTEL_ENABLED: "true"
   PROCESSING_DELAY_MS: "50"
+  AI_REMEDIATION_ENABLED: "true"
+  AI_REMEDIATION_MAX_RETRIES: "1"
 
 resources:
   requests:

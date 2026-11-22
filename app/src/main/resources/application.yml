@@ -7,6 +7,9 @@ server:
 
 app:
   processing-delay-ms: ${PROCESSING_DELAY_MS:0}
+  ai-remediation:
+    enabled: ${AI_REMEDIATION_ENABLED:true}
+    max-retries: ${AI_REMEDIATION_MAX_RETRIES:1}
 
 camel:
   main:

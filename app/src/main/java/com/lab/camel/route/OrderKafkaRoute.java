@@ -80,7 +80,7 @@ public class OrderKafkaRoute extends RouteBuilder {
                         throw new IllegalStateException("Erreur simulée sur le message contenant FAIL");
                     }
                 })
-                .log("Commande validée (schemaId=${header.X-Schema-Id}) | orderId=${exchangeProperty.parsedOrder.orderId} | item=${exchangeProperty.parsedOrder.item} | qty=${exchangeProperty.parsedOrder.qty}")
+                .log("Commande validée (schemaId=${header.X-Schema-Id}, autoRemediated=${header.X-Auto-Remediated}, aiRetryCount=${header.aiRetryCount}) | orderId=${exchangeProperty.parsedOrder.orderId} | item=${exchangeProperty.parsedOrder.item} | qty=${exchangeProperty.parsedOrder.qty}")
                 .process(exchange -> MDC.remove("CorrelationID"));
     }
 }

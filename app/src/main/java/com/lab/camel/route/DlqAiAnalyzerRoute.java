@@ -1,5 +1,7 @@
 package com.lab.camel.route;
 
+import com.lab.camel.remediation.AiRemediationDecision;
+import com.lab.camel.remediation.AiRemediationGuard;
 import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
@@ -18,12 +20,15 @@ public class DlqAiAnalyzerRoute extends RouteBuilder {
 
     private final EmbeddingModel embeddingModel;
     private final EmbeddingStore<TextSegment> embeddingStore;
+    private final AiRemediationGuard remediationGuard;
 
     public DlqAiAnalyzerRoute(
             EmbeddingModel embeddingModel,
-            EmbeddingStore<TextSegment> embeddingStore) {
+            EmbeddingStore<TextSegment> embeddingStore,
+            AiRemediationGuard remediationGuard) {
         this.embeddingModel = embeddingModel;
         this.embeddingStore = embeddingStore;
+        this.remediationGuard = remediationGuard;
     }
 
     @Override
@@ -34,11 +39,13 @@ public class DlqAiAnalyzerRoute extends RouteBuilder {
                     String correlationId = exchange.getIn().getHeader("CorrelationID", String.class);
                     String errorMessage = exchange.getIn().getHeader("ErrorMessage", String.class);
                     String failedPayload = exchange.getIn().getBody(String.class);
+                    int retryCount = parseRetryCount(exchange.getIn().getHeader("aiRetryCount", String.class));
 
                     if (correlationId != null && !correlationId.isBlank()) {
                         MDC.put("CorrelationID", correlationId);
                     }
                     MDC.put("ai_analysis", "true");
+                    exchange.setProperty("currentAiRetryCount", retryCount);
 
                     String safeError = errorMessage != null ? errorMessage : "Inconnue";
                     String safePayload = failedPayload != null ? failedPayload : "Vide";
@@ -55,12 +62,13 @@ public class DlqAiAnalyzerRoute extends RouteBuilder {
                     %s
                     --------------------------------------
 
-                    Réponds UNIQUEMENT par un objet JSON valide (sans texte autour, sans balises markdown) avec ces 5 clés :
-                    - "runbookRef": l'identifiant du runbook appliqué (ex: "RB-ORD-001") ou "NONE"
+                    Réponds UNIQUEMENT par un objet JSON valide (sans texte autour, sans balises markdown) avec ces 6 clés :
+                    - "runbookRef": l'identifiant du runbook appliqué (ex: "RB-ORD-001", "RB-KFK-002", "RB-NET-003") ou "NONE"
                     - "cause": explication courte de la panne en français
                     - "severity": LOW, MEDIUM ou HIGH
+                    - "autoRemediate": true si le runbook demande explicitement un rejeu dans orders.process, false s'il demande un rejet sans rejeu automatique
                     - "suggestedAction": action corrective concrète en reprenant les consignes du runbook
-                    - "correctedPayload": proposition du payload corrigé selon le runbook
+                    - "correctedPayload": l'objet JSON corrigé conforme au schéma Order (orderId entier positif, item texte, qty entier optionnel) ou null si autoRemediate est false
 
                     Erreur : %s
                     Payload en échec : %s
@@ -72,14 +80,48 @@ public class DlqAiAnalyzerRoute extends RouteBuilder {
 
                     exchange.getIn().setBody(prompt);
                 })
-                .log("Contexte RAG récupéré (match=${header.RagContextFound}), envoi à Ollama pour analyse...")
+                .log("Contexte RAG récupéré (match=${header.RagContextFound}, aiRetryCount=${exchangeProperty.currentAiRetryCount}), envoi à Ollama...")
                 .to("langchain4j-chat:dlq-analyzer?chatOperation=CHAT_SINGLE_MESSAGE")
                 .log("Analyse IA + RAG terminée | Resultat=${body}")
                 .to("kafka:orders.dlq.analyzed")
                 .process(exchange -> {
+                    String aiResult = exchange.getIn().getBody(String.class);
+                    int currentRetryCount = exchange.getProperty("currentAiRetryCount", 0, Integer.class);
+                    AiRemediationDecision decision = remediationGuard.evaluate(aiResult, currentRetryCount);
+
+                    exchange.getIn().setHeader("RemediationStatus", decision.status());
+                    exchange.getIn().setHeader("RemediationReason", decision.reason());
+                    exchange.getIn().setHeader("X-Remediation-Runbook", decision.runbookRef());
+
+                    if (decision.approved()) {
+                        exchange.getIn().setBody(decision.correctedPayload());
+                        exchange.getIn().setHeader("aiRetryCount", String.valueOf(decision.nextRetryCount()));
+                        exchange.getIn().setHeader("X-Auto-Remediated", "true");
+                    }
+                })
+                .choice()
+                .when(header("RemediationStatus").isEqualTo("APPROVED"))
+                .removeHeaders("kafka.*|ErrorMessage|SchemaViolation")
+                .log("Auto-remédiation IA approuvée (${header.X-Remediation-Runbook}, retry=${header.aiRetryCount}), réinjection dans orders.process | Payload=${body}")
+                .to("kafka:orders.process")
+                .otherwise()
+                .log("Auto-remédiation IA non déclenchée | status=${header.RemediationStatus} | raison=${header.RemediationReason}")
+                .end()
+                .process(exchange -> {
                     MDC.remove("ai_analysis");
                     MDC.remove("CorrelationID");
                 });
+    }
+
+    private int parseRetryCount(String headerValue) {
+        if (headerValue == null || headerValue.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(headerValue.trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private String retrieveRunbookContext(String query) {
