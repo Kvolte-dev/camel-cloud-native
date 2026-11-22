@@ -16,6 +16,8 @@ app:
 camel:
   main:
     name: camel-lab-context
+  springboot:
+    backlog-tracing-standby: true
   component:
     activemq6:
       broker-url: ${ACTIVEMQ_URL:tcp://localhost:61616}
