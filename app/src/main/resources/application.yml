@@ -3,6 +3,9 @@ spring:
     enabled: true
   application:
     name: camel-app
+  autoconfigure:
+    exclude:
+      - io.hawt.springboot.HawtioEndpointAutoConfiguration
 
 server:
   port: 8080
