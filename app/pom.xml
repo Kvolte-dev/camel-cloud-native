@@ -117,6 +117,12 @@
             <artifactId>camel-opentelemetry2-starter</artifactId>
         </dependency>
 
+        <!-- Base vectorielle Qdrant pour le RAG (client gRPC inclus) -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-qdrant</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

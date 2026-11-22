@@ -1,6 +1,6 @@
 image:
   repository: camel-app
-  tag: "1.0.1"
+  tag: "1.0.2"
   pullPolicy: IfNotPresent
 
 service:
@@ -11,8 +11,12 @@ env:
   KAFKA_BROKERS: "local-kafka-kafka-bootstrap.messaging.svc.cluster.local:9092"
   OLLAMA_URL: "http://host.docker.internal:11434"
   OLLAMA_MODEL: "llama3.1:8b"
+  OLLAMA_EMBEDDING_MODEL: "nomic-embed-text"
+  QDRANT_HOST: "qdrant.ai.svc.cluster.local"
+  QDRANT_PORT: "6334"
+  QDRANT_COLLECTION: "sre-runbooks"
   OTEL_ENABLED: "true"
-  PROCESSING_DELAY_MS: "100"
+  PROCESSING_DELAY_MS: "50"
 
 resources:
   requests:
