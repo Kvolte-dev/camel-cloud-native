@@ -156,6 +156,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.apache.camel.springboot</groupId>
+            <artifactId>camel-debug-starter</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>io.hawt</groupId>
             <artifactId>hawtio-springboot</artifactId>
             <version>4.1.0</version>
