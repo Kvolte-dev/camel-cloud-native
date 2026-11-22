@@ -29,6 +29,10 @@ qdrant:
   port: ${QDRANT_PORT:6334}
   collection-name: ${QDRANT_COLLECTION:sre-runbooks}
 
+apicurio:
+  registry-url: ${APICURIO_URL:http://localhost:8080/apis/ccompat/v7}
+  order-subject: ${ORDER_SCHEMA_SUBJECT:orders.process-value}
+
 management:
   endpoint:
     health:

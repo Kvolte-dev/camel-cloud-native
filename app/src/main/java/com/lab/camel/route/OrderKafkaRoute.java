@@ -1,30 +1,60 @@
 package com.lab.camel.route;
 
+import com.lab.camel.contract.OrderContractService;
+import com.lab.camel.contract.SchemaValidationException;
+import com.lab.camel.model.Order;
 import org.apache.camel.Exchange;
-import org.apache.camel.LoggingLevel;
 import org.apache.camel.builder.RouteBuilder;
 import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-
 @Component
 public class OrderKafkaRoute extends RouteBuilder {
-    // En haut de la classe OrderKafkaRoute :
-    @org.springframework.beans.factory.annotation.Value("${app.processing-delay-ms:0}")
+
+    private final OrderContractService orderContractService;
+
+    @Value("${app.processing-delay-ms:0}")
     private long processingDelayMs;
+
+    public OrderKafkaRoute(OrderContractService orderContractService) {
+        this.orderContractService = orderContractService;
+    }
+
     @Override
     public void configure() {
+        // Erreur de contrat de données : pas de retry, routage direct vers la DLQ
+        onException(SchemaValidationException.class)
+                .handled(true)
+                .process(exchange -> {
+                    Exception cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    String errorMsg = cause != null ? cause.getMessage() : "Violation du schéma JSON";
+                    exchange.getIn().setHeader("ErrorMessage", errorMsg);
+                    exchange.getIn().setHeader("SchemaViolation", "true");
+                    MDC.put("dlq", "true");
+                })
+                .log("Contrat Apicurio violé, routage direct en DLQ | Raison=${header.ErrorMessage}")
+                .to("kafka:orders.dlq")
+                .process(exchange -> {
+                    MDC.remove("dlq");
+                    MDC.remove("CorrelationID");
+                });
 
-        // 1. Stratégie DLQ : 3 tentatives espacées d'1 seconde, puis routage vers direct:orders-dlq
-        errorHandler(deadLetterChannel("direct:orders-dlq")
+        // Erreurs métier/techniques : 3 tentatives avant envoi en DLQ
+        errorHandler(deadLetterChannel("kafka:orders.dlq")
                 .maximumRedeliveries(3)
                 .redeliveryDelay(1000)
-                .retryAttemptedLogLevel(LoggingLevel.WARN)
-                .logExhausted(true));
+                .retryAttemptedLogLevel(org.apache.camel.LoggingLevel.WARN)
+                .onPrepareFailure(exchange -> {
+                    Exception cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
+                    String errorMsg = cause != null ? cause.getMessage() : "Erreur inconnue";
+                    exchange.getIn().setHeader("ErrorMessage", errorMsg);
+                    MDC.put("dlq", "true");
+                })
+        );
 
-        // 2. Route principale : consommation du topic Kafka orders.process
         from("kafka:orders.process?groupId=local-processor&autoOffsetReset=earliest")
                 .routeId("kafka-orders-process-route")
                 .process(exchange -> {
@@ -34,34 +64,23 @@ public class OrderKafkaRoute extends RouteBuilder {
                         exchange.getIn().setHeader("CorrelationID", correlationId);
                     }
                     MDC.put("CorrelationID", correlationId);
-                })
-                .log("Traitement Kafka démarré | Partition=${header['kafka.PARTITION']} | Offset=${header['kafka.OFFSET']} | Payload=${body}")
-                .process(exchange -> {
+
                     if (processingDelayMs > 0) {
                         Thread.sleep(processingDelayMs);
                     }
-                    String body = exchange.getIn().getBody(String.class);
-                    if (body != null && body.contains("FAIL")) {
+
+                    String rawBody = exchange.getIn().getBody(String.class);
+                    Order order = orderContractService.validateAndParse(rawBody);
+
+                    exchange.getIn().setHeader("X-Schema-Subject", orderContractService.getSubject());
+                    exchange.getIn().setHeader("X-Schema-Id", orderContractService.getActiveSchemaId());
+                    exchange.setProperty("parsedOrder", order);
+
+                    if (order.item().contains("FAIL")) {
                         throw new IllegalStateException("Erreur simulée sur le message contenant FAIL");
                     }
                 })
-                .log("Commande traitée avec succès | Payload=${body}")
+                .log("Commande validée (schemaId=${header.X-Schema-Id}) | orderId=${exchangeProperty.parsedOrder.orderId} | item=${exchangeProperty.parsedOrder.item} | qty=${exchangeProperty.parsedOrder.qty}")
                 .process(exchange -> MDC.remove("CorrelationID"));
-
-        // 3. Sous-route DLQ : enrichit l'erreur, loggue pour Kibana et publie dans orders.dlq
-        from("direct:orders-dlq")
-                .routeId("kafka-orders-dlq-route")
-                .process(exchange -> {
-                    Exception cause = exchange.getProperty(Exchange.EXCEPTION_CAUGHT, Exception.class);
-                    String errorMsg = (cause != null) ? cause.getMessage() : "Erreur inconnue";
-                    exchange.getIn().setHeader("ErrorMessage", errorMsg);
-                    MDC.put("dlq", "true");
-                })
-                .log(LoggingLevel.ERROR, "Message envoyé en DLQ | Erreur=${header.ErrorMessage} | Payload=${body}")
-                .to("kafka:orders.dlq")
-                .process(exchange -> {
-                    MDC.remove("dlq");
-                    MDC.remove("CorrelationID");
-                });
     }
 }

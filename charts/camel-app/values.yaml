@@ -1,6 +1,6 @@
 image:
   repository: camel-app
-  tag: "1.0.2"
+  tag: "1.0.3"
   pullPolicy: IfNotPresent
 
 service:
@@ -9,6 +9,8 @@ service:
 env:
   ACTIVEMQ_URL: "tcp://activemq.messaging.svc.cluster.local:61616"
   KAFKA_BROKERS: "local-kafka-kafka-bootstrap.messaging.svc.cluster.local:9092"
+  APICURIO_URL: "http://apicurio-registry.messaging.svc.cluster.local:8080/apis/ccompat/v7"
+  ORDER_SCHEMA_SUBJECT: "orders.process-value"
   OLLAMA_URL: "http://host.docker.internal:11434"
   OLLAMA_MODEL: "llama3.1:8b"
   OLLAMA_EMBEDDING_MODEL: "nomic-embed-text"

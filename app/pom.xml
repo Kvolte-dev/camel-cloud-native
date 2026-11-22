@@ -123,6 +123,13 @@
             <artifactId>langchain4j-qdrant</artifactId>
         </dependency>
 
+        <!-- Validation JSON Schema Draft 2020-12 native Jackson 3 / Spring Boot 4 -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>3.0.8</version>
+        </dependency>
+
     </dependencies>
 
     <build>

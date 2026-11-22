@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Order",
+  "description": "Contrat de commande pour le topic Kafka orders.process",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderId", "item"],
+  "properties": {
+    "orderId": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Identifiant numérique unique de la commande"
+    },
+    "item": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100,
+      "description": "Référence ou libellé de l'article"
+    },
+    "qty": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000,
+      "description": "Quantité commandée (optionnelle, 1 par défaut)"
+    }
+  }
+}
