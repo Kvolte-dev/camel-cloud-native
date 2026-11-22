@@ -1,85 +1,187 @@
-# Camel Cloud-Native
+# 🐪 Camel Cloud Native
 
-Plateforme d'integration evenementielle **Apache Camel 4.22 / Spring Boot 4 / Java 25** deployee en mode **GitOps (ArgoCD App-of-Apps)** sur un cluster **Kind multi-noeuds** amorce par **Terraform**, avec validation de contrats **Apicurio Registry**, **observabilite** et **auto-remediation IA en boucle fermee (Qdrant + Ollama)**.
-
----
-
-## Architecture
-
-Terraform (Day 0 - infra/terraform/)
-   |-- Cluster Kind (1 control-plane + 2 workers, port 8080 -> 30080)
-   |-- Operateurs Helm (Envoy Gateway, Strimzi, KEDA, Sealed Secrets, ArgoCD)
-   +-- Root App ArgoCD --> surveille gitops/argocd/
-
-ArgoCD App-of-Apps (Day 1/2 - GitOps)
-   |-- messaging      : Strimzi Kafka (KRaft), Kafbat UI, ActiveMQ Artemis, Apicurio Registry
-   |-- observability  : Prometheus, Grafana, Loki, Alloy
-   |-- gateway        : Envoy Gateway (Gateway API v1)
-   |-- ai             : Qdrant (vector store runbooks) + Ollama (RAG / LLM)
-   +-- camel-app      : image ghcr.io/kvolte-dev/camel-app:main (non-root)
-
-Flux metier & boucle fermee IA
-   ActiveMQ (orders.in) --> Camel (orders.process + JSON Schema Apicurio)
-                                 |-- Valide --> traitement nominal
-                                 +-- Erreur / Schema KO --> orders.dlq
-                                                                |
-                        +---------------------------------------+
-                        v
-               DlqAiAnalyzerRoute (RAG Qdrant + Ollama)
-                        |-- Archive --> orders.dlq.analyzed
-                        +-- AiRemediationGuard (4 garde-fous)
-                               |-- APPROVED --> reinjection orders.process (aiRetryCount=1)
-                               +-- REJECTED --> blocage + metrique app_ai_remediation_total
+Architecture d'intégration événementielle **Cloud Native** déployée en **GitOps** sur Kubernetes, combinant **Apache Camel 4**, **ActiveMQ Classic**, **Apache Kafka**, **Hawtio**, **Envoy Gateway** et une analyse intelligente des **Dead Letter Queues (DLQ)** assistée par IA locale (Ollama + RAG).
 
 ---
 
-## Stack technique
+## 🎯 Objectifs du projet
 
-| Couche | Composant | Role |
+* Démontrer une chaîne d'intégration moderne et résiliente (ActiveMQ → Apache Camel → Kafka) sur Kubernetes.
+* Automatiser le provisioning d'infrastructure avec **Terraform** et le déploiement continu avec **ArgoCD**.
+* Garantir un haut niveau d'**observabilité** (métriques Prometheus/Grafana, logs JSON structurés, inspection JMX/Jolokia, traçage et débogage pas-à-pas des routes via **Hawtio**).
+* Appliquer les bonnes pratiques **DevSecOps** (conteneurs non-root, scan de vulnérabilités **Trivy** en CI/CD).
+* Enrichir le traitement des erreurs métier/techniques (DLQ) via un analyseur IA local (**Ollama** + **Qdrant RAG**).
+
+---
+
+## 🏗️ Architecture globale
+
+```mermaid
+flowchart LR
+    Client["Client / API REST"] -->|HTTP :8080| Envoy["Envoy Gateway\n(main-gateway)"]
+
+    subgraph K8s["Cluster Kubernetes (KinD)"]
+        Envoy -->|/hawtio| Hawtio["Hawtio 2.x\n(ns: messaging)"]
+        Envoy -->|activemq.localhost| AMQ["ActiveMQ Classic\n(ns: messaging)"]
+
+        subgraph Apps["Namespace: apps"]
+            Camel["camel-app\n(Java 25 / Spring Boot 4 / Camel 4)"]
+        end
+
+        AMQ -->|"orders.in"| Camel
+        Camel -->|"orders.process"| Kafka["Apache Kafka"]
+        Kafka -->|"DLQ"| Camel
+        Camel -->|"Analyse IA"| Ollama["Ollama (Host GPU)"]
+        Hawtio -.->|"Proxy Jolokia\n/api/jolokia"| AMQ
+        Hawtio -.->|"Proxy Jolokia\n/actuator/jolokia"| Camel
+    end
+```
+
+### Flux des routes Apache Camel (`camel-lab-context`)
+
+| Route ID | Source | Destination / Rôle |
 | :--- | :--- | :--- |
-| IaC & GitOps | Terraform, Kind, ArgoCD, Sealed Secrets | Provisionnement Day 0 et synchronisation continue Day 1/2 |
-| Reseau & Autoscaling | Envoy Gateway, KEDA | Routage HTTP local (*.localhost:8080) et scalabilite evenementielle |
-| Messagerie & Contrats | Strimzi Kafka, ActiveMQ, Kafbat UI, Apicurio | Transport d'evenements, DLQ et validation JSON Schema |
-| Application & IA | Java 25, Spring Boot 4, Camel 4.22, Qdrant, Ollama | Routes Camel, recherche vectorielle de runbooks et remediation gardee |
-| Observabilite & CI/CD | Prometheus, Grafana, Loki, Alloy, GitHub Actions, Trivy, GHCR | Metriques/logs, tests JUnit 6 / AdviceWith, scan securite et registre d'images |
+| **`activemq-orders-in-route`** | `activemq6:queue:orders.in` | Consomme les commandes entrantes, enrichit/valide le payload et publie sur `kafka:orders.process`. |
+| **`kafka-orders-process-route`** | `kafka:orders.process` | Traite les commandes et gère les exceptions (`onException`) avec routage vers la DLQ en cas d'échec. |
+| **`kafka-dlq-ai-analyzer-route`** | Topic DLQ Kafka | Intercepte les messages en échec, sollicite le modèle IA local pour diagnostiquer la cause racine et router l'action corrective. |
 
 ---
 
-## Interfaces locales (via Envoy Gateway)
+## 🧰 Stack technique
 
-| Service | URL |
+| Domaine | Technologies |
 | :--- | :--- |
-| ArgoCD | http://argocd.localhost:8080 |
-| Grafana | http://grafana.localhost:8080 |
-| Kafbat UI | http://kafka.localhost:8080 |
-| ActiveMQ Console | http://activemq.localhost:8080/admin |
-| Qdrant Dashboard | http://qdrant.localhost:8080/dashboard |
-| Apicurio Registry API | http://apicurio.localhost:8080/apis/registry/v3/system/info |
+| **Application** | Java 25, Spring Boot 4.1.2, Apache Camel 4, Maven |
+| **Messaging** | ActiveMQ Classic (`61616` / `8161`), Apache Kafka |
+| **Infrastructure** | KinD (Kubernetes in Docker), Terraform, Envoy Gateway |
+| **GitOps & CI/CD** | ArgoCD, GitHub Actions, GHCR (`ghcr.io/kvolte-dev/camel-app`) |
+| **Observabilité** | Hawtio 2.x, Jolokia 2.1.2 (`AgentServlet`), Spring Boot Actuator, Prometheus, Grafana |
+| **Sécurité** | Trivy (scan d'images), exécution non-root (`appuser`) |
+| **IA / RAG** | Ollama (GPU local), Qdrant *(Chantier 3)* |
 
 ---
 
-## Demarrage rapide
+## 📁 Structure du dépôt
 
-### 1. Provisionner le cluster et ArgoCD (Terraform)
+```text
+camel-cloud-native/
+├── app/                                # Code source Java / Spring Boot / Apache Camel
+│   ├── src/main/java/com/lab/camel/
+│   │   ├── CamelLabApplication.java    # Point d'entrée Spring Boot
+│   │   ├── config/
+│   │   │   └── JolokiaConfig.java      # Exposition Servlet Jolokia 2 (/actuator/jolokia/*)
+│   │   └── routes/                     # Définition des routes Camel (ActiveMQ, Kafka, DLQ IA)
+│   ├── src/main/resources/
+│   │   └── application.yml             # Config Camel, JMX, BacklogTracer & BacklogDebugger
+│   ├── Dockerfile                      # Build multi-stage durci (non-root)
+│   └── pom.xml                         # Dépendances Spring Boot 4, Camel 4, Jolokia 2
+├── charts/
+│   └── camel-app/                      # Chart Helm de l'application
+├── gitops/                             # Manifestes Kubernetes gérés par ArgoCD
+│   ├── messaging/
+│   │   ├── activemq.yaml               # Déploiement & Service ActiveMQ Classic
+│   │   └── hawtio.yaml                 # Console Hawtio 2.x + proxyAllowlist + HTTPRoute
+│   └── ...
+├── infra/                              # Scripts Terraform (cluster KinD, Envoy Gateway, ArgoCD)
+└── .github/workflows/                  # Pipeline CI/CD (Build, Test, Trivy, Push GHCR)
+```
 
-cd infra\terraform
+---
+
+## 🚀 Démarrage rapide (Environnement local)
+
+### Prérequis
+
+* **Docker Desktop** (ou moteur Docker compatible KinD)
+* **KinD**, **kubectl**, **Helm**, **Terraform**
+* **JDK 25** & **Maven 3.9+** (pour les builds locaux)
+* **PowerShell** (Windows) ou Bash
+
+### 1. Provisionner l'infrastructure (Terraform)
+
+```powershell
+cd infra
 terraform init
 terraform apply -auto-approve
-kind export kubeconfig --name camel-cloud-native
+```
 
-### 2. Lancer les tests en local
+Cette étape crée le cluster KinD, installe **Envoy Gateway** (`main-gateway`) et déploie **ArgoCD** pointant sur ce dépôt Git.
 
-cd app
-mvn test -B
+### 2. Vérifier la synchronisation ArgoCD
 
-### 3. Detruire l'environnement
+```powershell
+kubectl get applications -n argocd
+kubectl get pods -n messaging
+kubectl get pods -n apps
+```
 
-cd infra\terraform
-terraform destroy -auto-approve
+Tous les pods (`activemq`, `hawtio`, `camel-app`) doivent être en état `Running` (`1/1`).
 
 ---
 
-## Scenarios de validation
+## 🔍 Exploitation & Observabilité avec Hawtio
 
-1. Auto-remediation approuvee (APPROVED) : envoyer {"orderId": 1001, "item": "FAIL", "qty": 2} dans orders.in -> passage en orders.dlq, analyse RAG (RB-ORD-001), archivage dans orders.dlq.analyzed, validation Apicurio OK et reinjection dans orders.process (aiRetryCount=1).
-2. Blocage par garde-fou (POLICY_BLOCKED / schema) : envoyer {"orderId": "BAD", "qty": -1} dans orders.in -> routage direct en orders.dlq, analyse IA, rejet par AiRemediationGuard sans reinjection et increment de app_ai_remediation_total.
+Hawtio est exposé via Envoy Gateway sur **`http://hawtio.localhost:8080/hawtio/`**.
+
+### Connexions pré-autorisées (`proxyAllowlist`)
+
+Dans l'onglet **Connect** → **Add connection** de Hawtio :
+
+| Cible | Host | Port | Path | Authentification |
+| :--- | :--- | :--- | :--- | :--- |
+| **ActiveMQ Local** | `activemq.messaging.svc.cluster.local` | `8161` | `/api/jolokia` | `admin` / `admin` |
+| **Camel App** | `camel-app.apps.svc.cluster.local` | `8080` | `/actuator/jolokia` | Aucune (local) |
+
+### Fonctionnalités activées sur `camel-app`
+
+* **JMX & Jolokia 2 (compatible Spring Boot 4)** : exposé via `JolokiaConfig` (`jolokia-server-core` + `jolokia-service-serializer` + `jolokia-service-jmx`) sans dépendre de `hawtio-springboot`.
+* **Route Diagram** : visualisation graphique des routes et compteurs d'échanges en temps réel.
+* **Trace (`BacklogTracer`)** : activé en mode *standby* (`camel.springboot.backlog-tracing-standby: true`) pour inspecter les headers et payloads à chaque étape sans impact sur les performances hors session.
+* **Debug (`BacklogDebugger`)** : activé en mode *standby* (`camel.debug.standby: true`) via `camel-debug-starter` pour poser des breakpoints directement sur les nœuds des routes.
+
+### Tester un flux de bout en bout
+
+Envoyer un message de test dans la queue `orders.in` :
+
+```powershell
+curl.exe -u admin:admin -X POST "[http://activemq.localhost:8080/api/message/orders.in?type=queue](http://activemq.localhost:8080/api/message/orders.in?type=queue)" `
+  -d 'body={"orderId":"TEST-001","amount":42.50,"status":"NEW"}'
+```
+
+Vérifier la santé de l'endpoint Jolokia via le proxy Hawtio :
+
+```powershell
+curl.exe -s [http://hawtio.localhost:8080/hawtio/proxy/http/camel-app.apps.svc.cluster.local:8080/actuator/jolokia/version](http://hawtio.localhost:8080/hawtio/proxy/http/camel-app.apps.svc.cluster.local:8080/actuator/jolokia/version)
+```
+
+---
+
+## 🔄 Workflow CI/CD & GitOps
+
+1. Chaque `git push` sur `main` déclenche **GitHub Actions** :
+   * Compilation et tests Maven (`mvn test-compile`).
+   * Build de l'image Docker multi-stage non-root.
+   * Analyse de sécurité **Trivy**.
+   * Publication sur **GHCR** (`ghcr.io/kvolte-dev/camel-app:main`).
+2. **ArgoCD** synchronise automatiquement les manifestes du dossier `gitops/`.
+3. Pour forcer le téléchargement d'une nouvelle image applicative sur le tag `main` :
+
+```powershell
+kubectl rollout restart deployment/camel-app -n apps
+kubectl rollout status deployment/camel-app -n apps
+```
+
+---
+
+## 🗺️ Roadmap & Chantiers
+
+- [x] **Chantier 1 — Socle Cloud Native & GitOps** : KinD, Terraform, Envoy Gateway, ArgoCD, ActiveMQ, Kafka, `camel-app`.
+- [x] **Chantier 2 — Sécurité & Durcissement** : Scan Trivy en CI/CD, exécution non-root (`appuser`) des conteneurs.
+- [x] **Observabilité avancée** : Hawtio 2.x, Jolokia 2 sur Spring Boot 4, `BacklogTracer` (Trace) et `BacklogDebugger` (Debug).
+- [ ] **Chantier 3 — RAG & IA sur la DLQ** : Déploiement de **Qdrant** dans Kubernetes et enrichissement de l'analyse IA des erreurs DLQ avec **Ollama** (base de connaissances d'incidents et runbooks).
+
+---
+
+## 👤 Auteur
+
+Développé par **Pierre** ([`@kvolte-dev`](https://github.com/kvolte-dev)).
