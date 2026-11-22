@@ -9,3 +9,11 @@
 app/target/
 **/.idea/
 *.iml
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+*.tfvars
+override.tf
