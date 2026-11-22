@@ -33,7 +33,7 @@ spec:
           command:
             - java
             - -Dhawtio.authenticationEnabled=false
-            - -Dhawtio.proxyAllowlist=activemq,activemq.messaging.svc.cluster.local
+            - -Dhawtio.proxyAllowlist=activemq,activemq.messaging.svc.cluster.local,camel-app.apps.svc.cluster.local
             - -jar
             - /hawtio/hawtio-app.jar
             - --port
