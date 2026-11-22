@@ -1,7 +1,7 @@
 image:
-  repository: camel-app
-  tag: "1.0.5"
-  pullPolicy: IfNotPresent
+  repository: ghcr.io/kvolte-dev/camel-app
+  tag: "main"
+  pullPolicy: Always
 
 service:
   port: 8080
