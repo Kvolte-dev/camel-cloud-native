@@ -98,14 +98,18 @@ jobs:
         id: meta
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          REPO=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          ACTOR=$(echo "${{ github.actor }}" | tr '[:upper:]' '[:lower:]')
           SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
+          echo "actor=${ACTOR}" >> "$GITHUB_OUTPUT"
           echo "image=ghcr.io/${OWNER}/camel-app" >> "$GITHUB_OUTPUT"
           echo "sha_tag=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
       - name: Build hardened Docker image
         run: |
           docker build \
-            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.source=https://github.com/${{ steps.meta.outputs.repo }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             -t "${{ steps.meta.outputs.image }}:main" \
             -t "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" \
@@ -123,7 +127,7 @@ jobs:
 
       - name: Log in to GitHub Container Registry (GHCR)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ steps.meta.outputs.actor }}" --password-stdin
 
       - name: Push verified image to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
