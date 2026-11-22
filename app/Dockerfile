@@ -8,7 +8,7 @@ RUN mvn dependency:go-offline -B
 
 # 2. On copie les sources et on compile le JAR
 COPY src ./src
-RUN mvn clean package -DskipTests -B
+RUN mvn clean package -B
 
 # 3. Extraction des couches (remplaçant officiel de layertools dans Spring Boot 4)
 RUN java -Djarmode=tools -jar target/camel-app-0.0.1-SNAPSHOT.jar extract --layers --launcher --destination extracted
