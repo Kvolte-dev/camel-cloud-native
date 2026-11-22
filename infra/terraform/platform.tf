@@ -45,7 +45,7 @@ resource "helm_release" "keda" {
 # 4. Sealed Secrets (déchiffrement GitOps des secrets)
 resource "helm_release" "sealed_secrets" {
   name       = "sealed-secrets"
-  repository = "https://bitnami-labs.github.io/sealed-secrets"
+  repository = "https://raw.githubusercontent.com/bitnami-labs/sealed-secrets/gh-pages"
   chart      = "sealed-secrets"
   namespace  = "kube-system"
   wait       = true
