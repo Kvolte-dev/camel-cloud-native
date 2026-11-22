@@ -1,4 +1,6 @@
 spring:
+  jmx:
+    enabled: true
   application:
     name: camel-app
 
@@ -45,7 +47,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus
+        include: health,info,prometheus,jolokia
   tracing:
     sampling:
       probability: 1.0
@@ -66,12 +68,6 @@ management:
     export:
       otlp:
         enabled: ${OTEL_ENABLED:false}
-
-  management:
-    endpoints:
-      web:
-        exposure:
-          include: health,info,prometheus,jolokia
 
 logging:
   level:
