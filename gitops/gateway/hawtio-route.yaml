@@ -5,15 +5,11 @@ metadata:
   namespace: messaging
 spec:
   parentRefs:
-    - name: eg
+    - name: main-gateway
       namespace: envoy-gateway-system
   hostnames:
     - "hawtio.localhost"
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
+    - backendRefs:
         - name: hawtio
           port: 8080
