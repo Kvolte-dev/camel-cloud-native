@@ -15,13 +15,15 @@ spec:
       labels:
         app: hawtio
     spec:
+      securityContext:
+        fsGroup: 100
       initContainers:
         - name: download-hawtio
           image: curlimages/curl:8.10.1
           command:
             - sh
             - -c
-            - curl -fsSL https://repo1.maven.org/maven2/io/hawt/hawtio-app/4.2.0/hawtio-app-4.2.0.jar -o /hawtio/hawtio-app.jar
+            - curl -fsSL https://repo1.maven.org/maven2/io/hawt/hawtio-app/3.0-M6/hawtio-app-3.0-M6.jar -o /hawtio/hawtio-app.jar
           volumeMounts:
             - name: hawtio-bin
               mountPath: /hawtio
